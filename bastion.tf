@@ -28,6 +28,17 @@ resource "aws_security_group" "bastion_sg" {
   }
 }
 
+# Bastion에서 EKS Cluster API 서버로 접근 허용
+resource "aws_security_group_rule" "bastion_to_eks_api" {
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.bastion_sg.id
+  security_group_id        = module.eks.cluster_security_group_id
+  description              = "Allow Bastion to access EKS API server"
+}
+
 resource "aws_instance" "eks_bastion" {
   ami                         = data.aws_ssm_parameter.ami.value
   instance_type               = var.MyInstanceType

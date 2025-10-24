@@ -113,8 +113,8 @@ module "eks" {
   
   # 비용 최적화된 클러스터 로깅 설정
   cluster_enabled_log_types = [
-    "api",           # 필수: API 서버 로그
-    "scheduler"      # 저비용: 스케줄러 로그
+    # "api",           # 필수: API 서버 로그
+    # "scheduler"      # 저비용: 스케줄러 로그
     # audit, authenticator, controllerManager 제외 (비용 절약)
   ]
   

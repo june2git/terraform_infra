@@ -63,15 +63,16 @@ output "private_subnets" {
   value = module.vpc.private_subnets
 }
 
-output "cloudwatch_log_groups" {
-  description = "CloudWatch Log Groups 정보"
-  value = {
-    api_log_group      = aws_cloudwatch_log_group.eks_api.name
-    scheduler_log_group = aws_cloudwatch_log_group.eks_scheduler.name
-    api_retention_days  = aws_cloudwatch_log_group.eks_api.retention_in_days
-    scheduler_retention_days = aws_cloudwatch_log_group.eks_scheduler.retention_in_days
-  }
-}
+# CloudWatch Log Groups 출력 (비활성화됨)
+# output "cloudwatch_log_groups" {
+#   description = "CloudWatch Log Groups 정보"
+#   value = {
+#     api_log_group      = aws_cloudwatch_log_group.eks_api.name
+#     scheduler_log_group = aws_cloudwatch_log_group.eks_scheduler.name
+#     api_retention_days  = aws_cloudwatch_log_group.eks_api.retention_in_days
+#     scheduler_retention_days = aws_cloudwatch_log_group.eks_scheduler.retention_in_days
+#   }
+# }
 
 output "eks_access_roles" {
   description = "EKS 액세스 IAM 역할 정보"
