@@ -1,70 +1,9 @@
-########################
-# Provider Definitions #
-########################
-
-# AWS 공급자: 지정된 리전에서 AWS 리소스를 설정
-provider "aws" {
-  region = var.TargetRegion
-}
-
-# 요구 프로바이더 버전: helm 2.12.1
-terraform {
-  required_providers {
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.12.1"
-    }
-  }
-}
-
-# Kubernetes 공급자: EKS 클러스터와 연결 (엔드포인트, 인증 토큰, CA 인증서 사용)
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-  }
-}
-
-# Helm 공급자: EKS 클러스터에서 Helm Chart 배포를 관리
-provider "helm" {
-  kubernetes {
-    host                   = module.eks.cluster_endpoint
-    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
-    }
-  }
-}
-
-
-
 ##################
 # Data Resources #
 ##################
 
 # AWS 계정 정보 조회 (예: AWS Account ID)
 data "aws_caller_identity" "current" {}
-
-# EKS 클러스터의 OIDC 공급자 ARN을 구성
-locals {
-  cluster_oidc_issuer_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}"
-}
-
-# EKS 클러스터 메타데이터 조회
-data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_name
-  depends_on = [module.eks]
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = module.eks.cluster_name
-  depends_on = [module.eks]
-}
 
 
 
@@ -89,7 +28,7 @@ resource "aws_security_group_rule" "allow_ssh" {
   from_port   = 22
   to_port     = 22
   protocol    = "tcp"
-  cidr_blocks = ["192.168.1.100/32"]
+  cidr_blocks = ["10.0.1.100/32"]
 
   security_group_id = aws_security_group.node_group_sg.id
 }
@@ -107,8 +46,45 @@ module "eks" {
 
   cluster_name = var.ClusterBaseName
   cluster_version = var.KubernetesVersion
-  cluster_endpoint_private_access = false
+  cluster_endpoint_private_access = true
   cluster_endpoint_public_access  = true
+  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+  
+  # EKS 20.0+ 새로운 인증 방식 설정
+  authentication_mode = "API_AND_CONFIG_MAP"
+  
+  # 실무 표준: 명시적인 액세스 엔트리 관리
+  access_entries = {
+    # DevOps 팀 관리자 액세스
+    devops_admin = {
+      principal_arn     = aws_iam_role.devops_admin.arn
+      type              = "STANDARD"
+      policy_associations = {
+        cluster_admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            namespaces = []
+            type       = "cluster"
+          }
+        }
+      }
+    }
+    
+    # 개발팀 제한된 액세스
+    dev_team = {
+      principal_arn     = aws_iam_role.dev_team.arn
+      type              = "STANDARD"
+      policy_associations = {
+        dev_access = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
+          access_scope = {
+            namespaces = ["dev", "staging"]
+            type       = "namespace"
+          }
+        }
+      }
+    }
+  }
 
   cluster_addons = {
     coredns = {
@@ -120,14 +96,27 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
-    external-dns = {
+    # EBS CSI 드라이버 - IRSA를 통한 보안 강화
+    aws-ebs-csi-driver = {
       most_recent = true
+      service_account_role_arn = module.ebs_csi_irsa.iam_role_arn
     }
+    # External-DNS는 별도 파일에서 관리
+    # external-dns = {
+    #   most_recent = true
+    # }
   }
 
   vpc_id = module.vpc.vpc_id
   enable_irsa = true
-  subnet_ids = module.vpc.public_subnets
+  subnet_ids = module.vpc.private_subnets
+  
+  # 비용 최적화된 클러스터 로깅 설정
+  cluster_enabled_log_types = [
+    "api",           # 필수: API 서버 로그
+    "scheduler"      # 저비용: 스케줄러 로그
+    # audit, authenticator, controllerManager 제외 (비용 절약)
+  ]
   
   # EKS 관리형 노드 그룹 설정
   eks_managed_node_groups = {
@@ -139,111 +128,41 @@ module "eks" {
       max_size         = var.WorkerNodeCount + 2
       min_size         = var.WorkerNodeCount - 1
       disk_size        = var.WorkerNodeVolumesize
-      subnets          = module.vpc.public_subnets
+      disk_type        = "gp3"
+      subnets          = module.vpc.private_subnets
       key_name         = "kp_node"
       vpc_security_group_ids = [aws_security_group.node_group_sg.id]
       iam_role_name    = "${var.ClusterBaseName}-node-group-eks-node-group"
       iam_role_use_name_prefix = false
-      iam_role_additional_policies = {
-        "${var.ClusterBaseName}ExternalDNSPolicy" = aws_iam_policy.external_dns_policy.arn
-      } 
+      
+      # AL2023 최신 AMI 사용
+      ami_type = "AL2023_x86_64_STANDARD"
+      
+      # 업데이트 설정
+      update_config = {
+        max_unavailable_percentage = 50
+      }
+      
+      # 태그 설정
+      tags = {
+        Name = "${var.ClusterBaseName}-node-group"
+        Environment = "production"
+      }
    }
   }
 
   depends_on = [aws_instance.eks_bastion]
-  
-  # EKS 클러스터 액세스 관리
-  access_entries = {
-    admin = {
-      kubernetes_groups = []
-      principal_arn     = "${data.aws_caller_identity.current.arn}" 
-
-      policy_associations = {
-        myeks = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            namespaces = []
-            type       = "cluster"
-          }
-        }
-      }
-    }
-  }
 
   tags = {
-    Environment = "cnaee-lab"
+    Environment = "june2soul"
     Terraform   = "true"
   }
 }
 
-
-
-################
-# IAM Policies #
-################
-
-# ExternalDNS가 Route 53 DNS 레코드를 관리할 수 있도록 허용하는 IAM 정책
-resource "aws_iam_policy" "external_dns_policy" {
-  name        = "${var.ClusterBaseName}ExternalDNSPolicy"
-  description = "Policy for allowing ExternalDNS to modify Route 53 records"
-
-  policy = file("external_dns_policy.json")
-}
-
-# AWS Load Balancer Controller가 ELB를 관리할 수 있도록 허용하는 IAM 정책
-resource "aws_iam_policy" "aws_lb_controller_policy" {
-  name        = "${var.ClusterBaseName}AWSLoadBalancerControllerPolicy"
-  description = "Policy for allowing AWS LoadBalancerController to modify AWS ELB"
-
-  policy = file("aws_lb_controller_policy.json")
-}
+# EKS 20.0+에서는 aws-auth가 자동으로 관리됨
+# 워커 노드 IAM Role은 EKS 모듈에서 자동으로 aws-auth에 추가됨
 
 
 
-####################
-# IRSA Roles Setup #
-####################
-
-# AWS Load Balancer Controller가 OIDC 인증을 통해 AWS 리소스에 접근할 수 있도록 하는 역할
-module "irsa-lb-controller" {
-  source  = "terraform-aws-modules/iam/aws//modules/iam-assumable-role-with-oidc"
-  version = "5.39.0"
-
-  create_role                   = true
-  role_name                     = "AmazonEKSTFLBControllerRole-${module.eks.cluster_name}"
-  provider_url                  = module.eks.oidc_provider
-  role_policy_arns              = [aws_iam_policy.aws_lb_controller_policy.arn]
-  oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
-  oidc_fully_qualified_audiences = ["sts.amazonaws.com"]
-}
 
 
-
-######################
-# Helm Chart Install #
-######################
-
-# Helm Chart: AWS Load Balancer Controller를 EKS 클러스터에 배포
-resource "helm_release" "aws_load_balancer_controller" {
-  name       = "aws-load-balancer-controller"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  namespace  = "kube-system"
-  set {
-    name  = "clusterName"
-    value = var.ClusterBaseName
-  }
-  set {
-    name  = "serviceAccount.create"
-    value = "true"
-  }
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/AmazonEKSTFLBControllerRole-${module.eks.cluster_name}"
-  }
-  set {
-    name  = "region"
-    value = "ap-northeast-2"
-  }
-  depends_on = [module.eks, module.irsa-lb-controller]
-}

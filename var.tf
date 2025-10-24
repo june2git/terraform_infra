@@ -43,7 +43,7 @@ variable "ClusterBaseName" {
 variable "KubernetesVersion" {
   description = "Kubernetes version for the EKS cluster."
   type        = string
-  default     = "1.32"
+  default     = "1.33"
 }
 
 variable "WorkerNodeInstanceType" {
@@ -73,23 +73,61 @@ variable "TargetRegion" {
 variable "availability_zones" {
   description = "List of availability zones."
   type        = list(string)
-  default     = ["ap-northeast-2a", "ap-northeast-2b", "ap-northeast-2c"]
+  default     = ["ap-northeast-2a", "ap-northeast-2c"]
 }
 
 variable "VpcBlock" {
   description = "CIDR block for the VPC."
   type        = string
-  default     = "192.168.0.0/16"
+  default     = "10.0.0.0/16"
 }
 
 variable "public_subnet_blocks" {
   description = "List of CIDR blocks for the public subnets."
   type        = list(string)
-  default     = ["192.168.1.0/24", "192.168.2.0/24", "192.168.3.0/24"]
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
 variable "private_subnet_blocks" {
   description = "List of CIDR blocks for the private subnets."
   type        = list(string)
-  default     = ["192.168.11.0/24", "192.168.12.0/24", "192.168.13.0/24"]
+  default     = ["10.0.3.0/24", "10.0.4.0/24"]
+}
+
+variable "ecr_repo" { 
+  description = "ECR 저장소 이름 (Docker 이미지 저장용)"
+  type        = string
+  default     = "demo-app" 
+}
+
+variable "github_org" {
+  description = "GitHub organization or username"
+  type        = string
+  default     = "june2git"
+}
+
+variable "github_repo" {
+  description = "GitHub repository name"
+  type        = string
+  default     = "eks-app"
+}
+
+variable "api_log_retention_days" {
+  description = "API 로그 보존 기간 (일)"
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.api_log_retention_days >= 1 && var.api_log_retention_days <= 3653
+    error_message = "API 로그 보존 기간은 1일에서 3653일 사이여야 합니다."
+  }
+}
+
+variable "scheduler_log_retention_days" {
+  description = "스케줄러 로그 보존 기간 (일)"
+  type        = number
+  default     = 7
+  validation {
+    condition     = var.scheduler_log_retention_days >= 1 && var.scheduler_log_retention_days <= 3653
+    error_message = "스케줄러 로그 보존 기간은 1일에서 3653일 사이여야 합니다."
+  }
 }

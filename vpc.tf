@@ -43,39 +43,10 @@ module "vpc" {
   }
 
   tags = {
-    "Environment" = "cnaee-lab"
+    "Environment" = "june2soul"
   }
 }
 
 
 
-################################
-# Security Group Configuration #
-################################
-
-# 보안 그룹: Bastion Host를 위한 보안 그룹을 생성
-resource "aws_security_group" "eks_sec_group" {
-  vpc_id = module.vpc.vpc_id
-
-  name        = "${var.ClusterBaseName}-eks-sec-group"
-  description = "Security group for ${var.ClusterBaseName} Host"
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.SgIngressSshCidr]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${var.ClusterBaseName}-HOST-SG"
-  }
-}
 
