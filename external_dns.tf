@@ -1,16 +1,15 @@
-# External-DNS - 실무 표준 설정
+# Phase 9: External-DNS - 실무 표준 설정
 # EKS 클러스터와 노드 그룹이 완전히 준비된 후 설치
 
 resource "aws_eks_addon" "external_dns" {
   cluster_name = module.eks.cluster_name
   addon_name   = "external-dns"
   
-  # 노드 그룹이 완전히 준비된 후 설치 (강화된 의존성)
+  # Phase 9: 노드 그룹이 완전히 준비된 후 설치 (강화된 의존성)
   depends_on = [
     module.eks,
     module.eks.eks_managed_node_groups,
     module.external_dns_irsa,
-    aws_instance.eks_bastion  # Bastion Host도 준비된 후
   ]
   
   # 최신 버전 사용 (자동 선택)
@@ -37,7 +36,7 @@ resource "aws_eks_addon" "external_dns" {
   }
 }
 
-# External-DNS용 IRSA
+# Phase 7: External-DNS용 IRSA
 module "external_dns_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.39"
@@ -52,6 +51,11 @@ module "external_dns_irsa" {
   }
 
   attach_external_dns_policy = true
+
+  # Phase 7: EKS 클러스터 OIDC 완료 후 생성
+  depends_on = [
+    module.eks,
+  ]
 
   tags = {
     Name        = "${var.ClusterBaseName}-external-dns-role"

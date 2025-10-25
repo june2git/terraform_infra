@@ -1,7 +1,7 @@
-# 실무용 EKS 액세스 IAM 역할들
+# Phase 3: 실무용 EKS 액세스 IAM 역할들
 # 보안과 권한 관리를 위한 명시적인 역할 정의
 
-# DevOps 관리자 역할
+# Phase 3: DevOps 관리자 역할
 resource "aws_iam_role" "devops_admin" {
   name = "${var.ClusterBaseName}-devops-admin-role"
 
@@ -30,7 +30,7 @@ resource "aws_iam_role" "devops_admin" {
   }
 }
 
-# 개발팀 역할
+# Phase 3: 개발팀 역할
 resource "aws_iam_role" "dev_team" {
   name = "${var.ClusterBaseName}-dev-team-role"
 

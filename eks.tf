@@ -86,7 +86,10 @@ module "eks" {
     }
   }
 
+  # Phase 5: EKS 기본 애드온 (CoreDNS, kube-proxy, VPC-CNI)
+  # Phase 11: EBS CSI 드라이버는 ebs_csi_driver.tf에서 별도 관리
   cluster_addons = {
+    # Phase 5: 기본 애드온들
     coredns = {
       most_recent = true
     }
@@ -96,11 +99,12 @@ module "eks" {
     vpc-cni = {
       most_recent = true
     }
-    # EBS CSI 드라이버 - IRSA를 통한 보안 강화
-    aws-ebs-csi-driver = {
-      most_recent = true
-      service_account_role_arn = module.ebs_csi_irsa.iam_role_arn
-    }
+    # Phase 11: EBS CSI 드라이버는 순환 의존성 방지를 위해
+    # ebs_csi_driver.tf에서 aws_eks_addon 리소스로 별도 관리됨
+    # aws-ebs-csi-driver = {
+    #   most_recent = true
+    #   service_account_role_arn = module.ebs_csi_irsa.iam_role_arn
+    # }
     # External-DNS는 별도 파일에서 관리
     # external-dns = {
     #   most_recent = true
@@ -151,7 +155,12 @@ module "eks" {
    }
   }
 
-  depends_on = [aws_instance.eks_bastion]
+  # Phase 5: EKS 클러스터 생성 의존성
+  depends_on = [
+    module.vpc,                        # Phase 1: VPC 완료 후
+    aws_iam_role.devops_admin,         # Phase 3: IAM 역할 완료 후
+    aws_iam_role.dev_team,             # Phase 3: IAM 역할 완료 후
+  ]
 
   tags = {
     Environment = "june2soul"

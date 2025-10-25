@@ -1,3 +1,4 @@
+# Phase 7: ALB Controller용 IRSA
 module "alb_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.39"
@@ -13,6 +14,11 @@ module "alb_irsa" {
 
   policy_name_prefix                     = "${var.ClusterBaseName}-alb"
   attach_load_balancer_controller_policy = true
+
+  # Phase 7: EKS 클러스터 OIDC 완료 후 생성
+  depends_on = [
+    module.eks,
+  ]
 }
 
 # External-DNS IRSA는 external_dns.tf로 이동됨

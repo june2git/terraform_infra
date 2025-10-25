@@ -2,7 +2,7 @@
 # VPC and Networking Configuration #
 ####################################
 
-# VPC 모듈: 퍼블릭 및 프라이빗 서브넷을 포함하는 VPC를 생성
+# Phase 1: VPC 모듈 - 퍼블릭 및 프라이빗 서브넷을 포함하는 VPC를 생성
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~>5.7"
